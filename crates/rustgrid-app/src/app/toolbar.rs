@@ -77,12 +77,14 @@ impl AppView {
                         }
                     })
                     .child(self.titlebar_theme_button(theme, cx))
-                    .child(titlebar_icon_button(
-                        "titlebar-github",
-                        "icons/github.svg",
-                        theme,
-                        |_event, _window, _cx| open_in_browser(GITHUB_URL),
-                    ))
+                    .when(update::ONLINE_SERVICES_ENABLED, |row| {
+                        row.child(titlebar_icon_button(
+                            "titlebar-github",
+                            "icons/github.svg",
+                            theme,
+                            |_event, _window, _cx| open_in_browser(GITHUB_URL),
+                        ))
+                    })
                     .child(self.titlebar_update_button(theme, cx))
                     .child(titlebar_icon_button(
                         "titlebar-settings",

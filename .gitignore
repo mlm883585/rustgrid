@@ -1,4 +1,6 @@
 /target
+# Generated portable archives stay local; distribute binaries separately from source.
+/dist
 # Machine-local CPU throttle for cargo (see .cargo/config.toml); not shared.
 .cargo/config.toml
 **/*.rs.bk

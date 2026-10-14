@@ -48,6 +48,9 @@ self_update.workspace = true
 # adds no link-time or hard runtime dependency and a machine without ODBC still runs normally.
 default = ["driver-odbc"]
 driver-odbc = ["dep:rustgrid-odbc"]
+# For isolated networks: disable public update requests and external project links.
+# Database connections (including SSH/proxy tunnels) remain available.
+offline = []
 
 [build-dependencies]
 embed-resource.workspace = true

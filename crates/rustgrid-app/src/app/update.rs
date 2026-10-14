@@ -5,6 +5,7 @@
 //! the running target, extract the executable and replace the running one in place. Detection runs
 //! once shortly after launch; a newer release surfaces an update button in the titlebar, and
 //! 选项 → 关于 offers the same check plus a manual install.
+//! Builds with the `offline` feature disable both checks and installs for isolated networks.
 //!
 //! The asset names produced by the release workflow must contain the running platform tag (see
 //! [`PLATFORM`]), otherwise `self_update` cannot pick the right download.
@@ -22,6 +23,9 @@ const BIN_NAME: &str = "RustGrid";
 /// This build's version, from the workspace `Cargo.toml`. It is compared against the release tag
 /// (with its leading `v` stripped) to decide whether an update exists.
 pub(super) const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Offline builds keep database networking but never use the public update service.
+pub(super) const ONLINE_SERVICES_ENABLED: bool = !cfg!(feature = "offline");
 
 /// The platform tag this build downloads. It is a plain substring of the asset names minted by
 /// `.github/workflows/release.yml` (e.g. `RustGrid-0.0.1-windows-x64.zip`); `self_update` matches
@@ -78,6 +82,9 @@ impl UpdateStatus {
 /// Blocking: ask GitHub for the newest release and return its version when it is strictly newer
 /// than the running build. Runs on the tokio blocking pool via `Runtime::spawn_blocking`.
 fn check_latest() -> Result<Option<String>, String> {
+    if !ONLINE_SERVICES_ENABLED {
+        return Err(t!("about.offline").to_string());
+    }
     let updater = self_update::backends::github::Update::configure()
         .repo_owner(REPO_OWNER)
         .repo_name(REPO_NAME)
@@ -102,6 +109,9 @@ fn check_latest() -> Result<Option<String>, String> {
 fn install_latest(
     progress: tokio::sync::mpsc::UnboundedSender<(u64, Option<u64>)>,
 ) -> Result<String, String> {
+    if !ONLINE_SERVICES_ENABLED {
+        return Err(t!("about.offline").to_string());
+    }
     let status = self_update::backends::github::Update::configure()
         .repo_owner(REPO_OWNER)
         .repo_name(REPO_NAME)
@@ -168,7 +178,7 @@ impl AppView {
     /// `manual` (the 关于 button) reports failures in the UI; the quiet startup check swallows them
     /// (a missing network or a repository with no releases yet must not raise a red flag on launch).
     pub(super) fn check_for_updates(&mut self, manual: bool, cx: &mut Context<'_, Self>) {
-        if self.update_status.is_busy() {
+        if !ONLINE_SERVICES_ENABLED || self.update_status.is_busy() {
             return;
         }
         self.update_status = UpdateStatus::Checking;
@@ -214,7 +224,10 @@ impl AppView {
     /// drains it into `update_progress` so the titlebar and the 关于 page reflect the download
     /// live. The channel closes when the install finishes, which also ends the drain task.
     pub(super) fn install_update(&mut self, cx: &mut Context<'_, Self>) {
-        if self.update_status.is_busy() || matches!(self.update_status, UpdateStatus::Installed) {
+        if !ONLINE_SERVICES_ENABLED
+            || self.update_status.is_busy()
+            || matches!(self.update_status, UpdateStatus::Installed)
+        {
             return;
         }
         self.update_status = UpdateStatus::Downloading;
@@ -272,6 +285,9 @@ impl AppView {
 
     /// The human-readable status shown in 选项 → 关于.
     fn update_status_text(&self) -> String {
+        if !ONLINE_SERVICES_ENABLED {
+            return t!("about.offline").to_string();
+        }
         match &self.update_status {
             UpdateStatus::Idle => String::new(),
             UpdateStatus::Checking => t!("about.checking").to_string(),
@@ -294,6 +310,9 @@ impl AppView {
         theme: Theme,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
+        if !ONLINE_SERVICES_ENABLED {
+            return div().into_any_element();
+        }
         // `label` is `None` for the available state: the update affordance is just a compact
         // download icon, with the version available on hover.
         let (icon, label, color) = match &self.update_status {
@@ -446,7 +465,7 @@ impl AppView {
                     .text_color(rgb(theme.text_muted))
                     .child(t!("about.description").to_string()),
             )
-            .child(row)
+            .when(ONLINE_SERVICES_ENABLED, |element| element.child(row))
             .child(
                 div()
                     .text_size(px(12.0))
